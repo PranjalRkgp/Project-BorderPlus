@@ -429,7 +429,7 @@ def main():
     # Add logo to the top middle of the page
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.image("bordeplus_logo.jpeg", width=200)  # Adjust width as needed
+        st.image("BorderPlus_logo.png", width=200)  # Adjust width as needed
     
     with st.sidebar:
         st.header("Competitor Analysis Controls")
