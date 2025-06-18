@@ -465,11 +465,13 @@ def main():
     #     """,
     #     unsafe_allow_html=True
     # )
-    image = Image.open('BorderPlus_logo.png')
-    st.image(image, width=200)
+    # image = Image.open('BorderPlus_logo.png')
+    # st.image(image, width=200)
     
     with st.sidebar:
         st.header("Competitor Analysis Controls")
+        image = Image.open('BorderPlus_logo.png')
+        st.image(image)
         
         # Week selection with formatted display names
         selected_week = st.selectbox(
