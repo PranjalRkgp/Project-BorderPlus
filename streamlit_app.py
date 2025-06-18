@@ -426,6 +426,11 @@ def main():
         st.error(f"Could not retrieve available weeks: {str(e)}")
         return
     
+    # Add logo to the top middle of the page
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("bordeplus_logo.jpeg", width=200)  # Adjust width as needed
+    
     with st.sidebar:
         st.header("Competitor Analysis Controls")
         
@@ -468,6 +473,6 @@ def main():
         show_all_at_once_view(service, folder_ids['allatonce'], selected_week)
     else:
         show_dashboard_view(service, folder_ids, selected_week, selected_company, summary_df)
-
+        
 if __name__ == "__main__":
     main()
