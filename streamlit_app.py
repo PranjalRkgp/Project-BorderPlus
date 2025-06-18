@@ -166,6 +166,7 @@ def add_custom_css():
         
         .stApp {
             padding-top: 0 !important;
+            margin-top: 0 !important;
         }
         
         /* Remove extra padding from main content */
@@ -456,7 +457,7 @@ def main():
     
     # Add logo to the top middle of the page
     st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1, 1, 1])
     with col2:
         st.image("BorderPlus_logo.png", width=200)  # Adjust width as needed
     st.markdown('</div>', unsafe_allow_html=True)
