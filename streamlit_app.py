@@ -172,6 +172,18 @@ def add_custom_css():
         .main .block-container {
             padding-top: 0 !important;
         }
+
+        /* Remove all padding/margin at the top */
+        .stApp > div:first-child {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+        }
+        
+        /* Target the logo container specifically */
+        div[data-testid="column"]:has(img[src*="BorderPlus_logo.jpng"]) {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+        }        
     </style>
     """, unsafe_allow_html=True)
 
