@@ -181,7 +181,7 @@ def add_custom_css():
         }
         
         /* Target the logo container specifically */
-        div[data-testid="column"]:has(img[src*="BorderPlus_logo.jpng"]) {
+        div[data-testid="column"]:has(img[src*="BorderPlus_logo.png"]) {
             padding-top: 0 !important;
             margin-top: 0 !important;
         }        
