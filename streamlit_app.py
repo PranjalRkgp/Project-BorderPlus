@@ -469,9 +469,10 @@ def main():
     # st.image(image, width=200)
     
     with st.sidebar:
-        st.header("Competitor Analysis Controls")
+        
         image = Image.open('BorderPlus_logo.png')
         st.image(image)
+        st.header("Competitor Analysis Controls")
         
         # Week selection with formatted display names
         selected_week = st.selectbox(
