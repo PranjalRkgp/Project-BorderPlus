@@ -456,11 +456,14 @@ def main():
         return
     
     # Add logo to the top middle of the page
-    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 1, 1])
-    with col2:
-        st.image("BorderPlus_logo.png", width=200)  # Adjust width as needed
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <div class='logo-container'>
+            <img src='BorderPlus_logo.png' width='200'/>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
     
     with st.sidebar:
         st.header("Competitor Analysis Controls")
