@@ -159,7 +159,7 @@ def add_custom_css():
 
         /* New styles for logo positioning */
         .logo-container {
-            margin-top: -10rem !important;
+            margin-top: 0rem !important;
             margin-bottom: 0rem !important;
             padding-top: 0 !important;
         }
