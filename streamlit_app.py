@@ -459,7 +459,7 @@ def main():
     st.markdown(
         """
         <div class='logo-container'>
-            <img src='BorderPlus_logo.png' width='200'/>
+            <img src='BorderPlus_logo.png'>
         </div>
         """,
         unsafe_allow_html=True
