@@ -10,6 +10,7 @@ import io
 from datetime import datetime
 import json
 from pathlib import Path
+from PIL import Image
 
 # Set page config with light theme
 st.set_page_config(
