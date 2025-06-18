@@ -506,7 +506,7 @@ def main():
                 st.session_state.show_details = False
             else:
                 st.session_state.show_details = True
-            st.experimental_rerun()
+            st.rerun()
     
     # Determine which view to show
     if selected_company == "View All at Once" or not st.session_state.show_details:
