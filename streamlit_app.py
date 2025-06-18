@@ -456,14 +456,16 @@ def main():
         return
     
     # Add logo to the top middle of the page
-    st.markdown(
-        """
-        <div class='logo-container'>
-            <img src='BorderPlus_logo.png'>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    # st.markdown(
+    #     """
+    #     <div class='logo-container'>
+    #         <img src='BorderPlus_logo.png'>
+    #     </div>
+    #     """,
+    #     unsafe_allow_html=True
+    # )
+    image = Image.open('BorderPlus_logo.png')
+    st.image(image, width=200)
     
     with st.sidebar:
         st.header("Competitor Analysis Controls")
