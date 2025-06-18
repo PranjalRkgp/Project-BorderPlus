@@ -163,24 +163,20 @@ add_custom_css()
 
 # Authentication with token caching
 def authenticate():
-    # Load credentials from Streamlit secrets or local JSON
-    creds = Credentials(
-        token=None,  # Will be auto-refreshed
-        refresh_token=st.secrets["google_refresh_token"],
-        client_id=st.secrets["google_client_id"],
-        client_secret=st.secrets["google_client_secret"],
-        token_uri="https://oauth2.googleapis.com/token",
-        scopes=["https://www.googleapis.com/auth/drive.readonly"]
-    )
-    
-    # Force token refresh (first time)
     try:
+        creds = Credentials(
+            token=None,
+            refresh_token=st.secrets["google"]["refresh_token"],
+            client_id=st.secrets["google"]["client_id"],
+            client_secret=st.secrets["google"]["client_secret"],
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=["https://www.googleapis.com/auth/drive.readonly"]
+        )
         creds.refresh(Request())
+        return creds
     except Exception as e:
-        st.error(f"Failed to refresh token: {e}")
+        st.error(f"Authentication failed: {str(e)}")
         return None
-        
-    return creds
 
 # Helper functions
 def find_file(service, name, parent_id=None, mime_type=None):
