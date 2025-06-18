@@ -156,6 +156,22 @@ def add_custom_css():
             opacity: 0.6;
             pointer-events: none;
         }
+
+        /* New styles for logo positioning */
+        .logo-container {
+            margin-top: -2rem !important;
+            margin-bottom: 1rem !important;
+            padding-top: 0 !important;
+        }
+        
+        .stApp {
+            padding-top: 0 !important;
+        }
+        
+        /* Remove extra padding from main content */
+        .main .block-container {
+            padding-top: 0 !important;
+        }
     </style>
     """, unsafe_allow_html=True)
 
@@ -427,9 +443,11 @@ def main():
         return
     
     # Add logo to the top middle of the page
+    st.markdown('<div class="logo-container">', unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.image("BorderPlus_logo.png", width=200)  # Adjust width as needed
+    st.markdown('</div>', unsafe_allow_html=True)
     
     with st.sidebar:
         st.header("Competitor Analysis Controls")
