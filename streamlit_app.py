@@ -16,7 +16,7 @@ icon=Image.open('BorderPlus_icon.png')
 # Set page config with light theme
 st.set_page_config(
     page_title="Competitor Insights Dashboard",
-    page_icon= page_icon=icon),
+    page_icon=icon),
     layout="wide",
     initial_sidebar_state="expanded"
 )
