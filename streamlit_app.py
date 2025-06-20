@@ -1,3 +1,4 @@
+
 import streamlit as st
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -10,9 +11,8 @@ from datetime import datetime
 import json
 from pathlib import Path
 from PIL import Image
-import re
 
-icon = Image.open('BorderPlus_icon.png')
+icon=Image.open('BorderPlus_icon.png')
 # Set page config with light theme
 st.set_page_config(
     page_title="Competitor Insights Dashboard",
@@ -192,6 +192,7 @@ def add_custom_css():
 
 add_custom_css()
 
+# Authentication with token caching
 def authenticate():
     try:
         creds = Credentials(
@@ -208,6 +209,7 @@ def authenticate():
         st.error(f"Authentication failed: {str(e)}")
         return None
 
+# Helper functions
 def find_file(service, name, parent_id=None, mime_type=None):
     query = f"name = '{name}'"
     if parent_id:
@@ -230,58 +232,43 @@ def get_available_weeks(service, folder_id):
                   'july', 'august', 'september', 'october', 'november', 'december']
     
     for item in items:
-        lower_name = item['name'].lower()
-        if 'industry_report_week' in lower_name:
+        if 'week' in item['name'].lower():
             try:
-                # Match patterns like "week2june 25" or "week2june25"
-                match = re.match(r'industry_report_week(\d+)([a-z]+)([ _\'\-]?(\d{2}))?', lower_name)
-                if match:
-                    week_num = int(match.group(1))
-                    month_name = match.group(2)
-                    year_suffix = f" '{match.group(4)}" if match.group(4) else ''
+                # Extract week number and month name
+                parts = item['name'].lower().split('week')
+                if len(parts) > 1:
+                    week_month_part = parts[1].split('.')[0]  # Remove file extension
                     
-                    if month_name in month_order:
+                    # Separate week number from month name
+                    week_num_str = ''
+                    month_name = ''
+                    for i, c in enumerate(week_month_part):
+                        if c.isdigit():
+                            week_num_str += c
+                        else:
+                            month_name = week_month_part[i:]
+                            break
+                    
+                    if week_num_str and month_name in month_order:
+                        week_num = int(week_num_str)
                         month_num = month_order.index(month_name) + 1
-                        file_base = f"week{week_num}{month_name}{year_suffix.replace(' ', '')}"
-                        display_name = f"Week {week_num} {month_name.capitalize()}{year_suffix}"
-                        
                         weeks.append({
-                            'file_base': file_base,
-                            'display_name': display_name,
-                            'sort_key': (month_num, week_num)
+                            'identifier': f'week{week_num}{month_name}',
+                            'sort_key': (month_num, week_num),
+                            'display_name': f"Week {week_num} {month_name.capitalize()}"
                         })
             except Exception as e:
                 print(f"Error processing file {item['name']}: {str(e)}")
                 continue
     
+    # Sort by month number, then by week number (oldest to newest)
     weeks.sort(key=lambda x: x['sort_key'])
+    
+    # Return both identifiers and display names
     return {
-        'file_bases': [w['file_base'] for w in weeks],
+        'identifiers': [w['identifier'] for w in weeks],
         'display_names': [w['display_name'] for w in weeks]
     }
-
-def find_week_file(service, prefix, base_name, parent_id):
-    """Find a specific week file with fallback patterns"""
-    patterns = [
-        f"{prefix}_{base_name}",
-        f"{prefix}_{base_name.replace("'", " ")}",
-        f"{prefix.lower()}_{base_name}",
-        f"{prefix.lower()}_{base_name.replace("'", " ")}"
-    ]
-    
-    extensions = {
-        'Industry_Report': ['.html'],
-        'raw_info': ['.xlsx'],
-        'summary': ['.csv']
-    }[prefix.split('_')[0].lower()]
-    
-    for pattern in patterns:
-        for ext in extensions:
-            try:
-                return find_file(service, f"{pattern}{ext}", parent_id)
-            except:
-                continue
-    raise Exception(f"Could not find {prefix} file for week {base_name}")
 
 def download_file(service, file_id):
     request = service.files().get_media(fileId=file_id)
@@ -304,23 +291,35 @@ def read_excel_content(file_content):
 def read_csv_content(file_content):
     return pd.read_csv(file_content)
 
-def show_all_at_once_view(service, file_id):
+# View functions
+def show_all_at_once_view(service, allatonce_folder_id, selected_week):
     st.title("Industry Report - All at Once View")
+    display_week = selected_week.replace('week', 'Week ').title()
+    st.subheader(f"You are viewing the complete industry report for {display_week}")
+    
     try:
-        html_file = download_file(service, file_id)
+        html_file_id = find_file(service, f"industry_report_{selected_week}.html", parent_id=allatonce_folder_id)
+        html_file = download_file(service, html_file_id)
         html_content = read_html_content(html_file)
+        
+        # Wrap in a container with custom styling
         st.markdown(f"""
         <div class="custom-container">
             {html_content}
         </div>
         """, unsafe_allow_html=True)
+        
     except Exception as e:
         st.error(f"Could not load industry report: {str(e)}")
 
-def show_dashboard_view(service, file_ids, selected_company, summary_df):
+def show_dashboard_view(service, folder_ids, selected_week, selected_company, summary_df):
+    display_week = selected_week.replace('week', 'Week ').title()
     st.title(f"{selected_company} Insights Dashboard")
+    st.subheader(f"You are viewing {display_week} data")
+    
     try:
-        raw_file = download_file(service, file_ids['raw'])
+        raw_file_id = find_file(service, f"raw_info_{selected_week}.xlsx", parent_id=folder_ids['raw_info_sources'])
+        raw_file = download_file(service, raw_file_id)
         raw_df = read_excel_content(raw_file)
     except Exception as e:
         st.error(f"Could not load raw data: {str(e)}")
@@ -329,9 +328,19 @@ def show_dashboard_view(service, file_ids, selected_company, summary_df):
     company_summary = summary_df[summary_df['Company'] == selected_company].iloc[0]
     company_raw_data = raw_df[raw_df['Company'] == selected_company]
     
-    tab_names = ["Summary", "New Market", "New Product", "Pricing Changes", 
-                "Funding", "MOUs", "Hiring", "Leadership Changes", 
-                "Events", "Partnerships"]
+    tab_names = [
+        "Summary",
+        "New Market",
+        "New Product",
+        "Pricing Changes",
+        "Funding",
+        "MOUs",
+        "Hiring",
+        "Leadership Changes",
+        "Events",
+        "Partnerships"
+    ]
+    
     tabs = st.tabs(tab_names)
     
     with tabs[0]:  # Summary tab
@@ -349,12 +358,73 @@ def show_dashboard_view(service, file_ids, selected_company, summary_df):
             
         if pd.notna(company_summary['References']):
             st.markdown("**References:**")
-            for ref in company_summary['References'].split(';'):
+            references = company_summary['References'].split(';')
+            for ref in references:
                 ref = ref.strip()
                 if ref:
                     st.markdown(f"- [{ref}]({ref})")
+    
+    # Define the mapping between tabs and corresponding columns
+    tab_fields = {
+        "New Market": "new_market",
+        "New Product": "new_product",
+        "Pricing Changes": "pricing_changes",
+        "Funding": "funding",
+        "MOUs": "mous",
+        "Hiring": "hiring",
+        "Leadership Changes": "leadership_changes",
+        "Events": "events",
+        "Partnerships": "partnerships"
+    }
+    
+    # Create tabs for each field
+    for tab_name, field in tab_fields.items():
+        with tabs[tab_names.index(tab_name)]:
+            st.subheader(tab_name)
+            
+            # Filter data for this company and field (excluding empty, None, and 'none' values)
+            relevant_data = company_raw_data[
+                (company_raw_data[field].astype(str).str.lower().ne('none')) & 
+                (company_raw_data[field].astype(str).str.lower().ne('nan')) & 
+                (company_raw_data[field].astype(str).str.lower().ne(''))
+            ]
+            
+            if relevant_data.empty:
+                st.info(f"No {tab_name.lower()} information available for this week.")
+            else:
+                # Reset index to ensure unique identifiers for each row
+                relevant_data = relevant_data.reset_index(drop=True)
+                
+                for idx, row in relevant_data.iterrows():
+                    # Create a unique key for each button using tab_name and index
+                    button_key = f"see_more_{tab_name.lower()}_{idx}"
+                    
+                    # Create a card for each entry
+                    with st.container():
+                        st.markdown(f"""
+                            <div class="info-card">
+                                <div class="content">
+                                    <strong>{row[field]}</strong>
+                                </div>
+                                <div>Source: {row['Source']}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Add a "See More" button with unique key
+                        if st.button(f"See More Details", key=button_key):
+                            # Create a modal to show more details
+                            with st.expander("Full Details", expanded=True):
+                                st.markdown(f"**URL:** [{row['URL']}]({row['URL']})")
+                                st.markdown(f"**Date:** {row['Date']}")
+                                st.markdown("**Original Information:**")
+                                st.markdown(f"""
+                                <div class="custom-container">
+                                    {row['Information']}
+                                </div>
+                                """, unsafe_allow_html=True)
 
 def main():
+    # Initialize session state variables
     if 'show_details' not in st.session_state:
         st.session_state.show_details = False
     
@@ -368,9 +438,9 @@ def main():
     try:
         parent_folder_id = find_file(service, "Competitor Reporting", mime_type="application/vnd.google-apps.folder")
         folder_ids = {
-            'allatonce': find_file(service, "allatonce", parent_id=parent_folder_id),
-            'raw_info_sources': find_file(service, "raw_info_sources", parent_id=parent_folder_id),
-            'summary_sources': find_file(service, "summary_sources", parent_id=parent_folder_id)
+            'allatonce': find_file(service, "allatonce", parent_id=parent_folder_id, mime_type="application/vnd.google-apps.folder"),
+            'raw_info_sources': find_file(service, "raw_info_sources", parent_id=parent_folder_id, mime_type="application/vnd.google-apps.folder"),
+            'summary_sources': find_file(service, "summary_sources", parent_id=parent_folder_id, mime_type="application/vnd.google-apps.folder")
         }
     except Exception as e:
         st.error(str(e))
@@ -378,62 +448,72 @@ def main():
     
     try:
         weeks_data = get_available_weeks(service, folder_ids['allatonce'])
-        if not weeks_data['file_bases']:
-            st.error("No week files found in the 'allatonce' folder.")
-            return
-            
-        default_week_index = len(weeks_data['file_bases']) - 1
+        available_weeks = weeks_data['identifiers']
+        week_display_names = weeks_data['display_names']
+        
+        # Default to latest week (last in sorted list)
+        default_week_index = len(available_weeks) - 1 if available_weeks else 0
     except Exception as e:
         st.error(f"Could not retrieve available weeks: {str(e)}")
         return
     
+    # Add logo to the top middle of the page
+    # st.markdown(
+    #     """
+    #     <div class='logo-container'>
+    #         <img src='BorderPlus_logo.png'>
+    #     </div>
+    #     """,
+    #     unsafe_allow_html=True
+    # )
+    # image = Image.open('BorderPlus_logo.png')
+    # st.image(image, width=200)
+    
     with st.sidebar:
+        
         image = Image.open('BorderPlus_logo.png')
         st.image(image)
         st.header("Competitor Analysis Controls")
         
-        selected_week_index = st.selectbox(
+        # Week selection with formatted display names
+        selected_week = st.selectbox(
             "Select Week",
-            range(len(weeks_data['file_bases'])),
-            format_func=lambda x: weeks_data['display_names'][x],
+            options=available_weeks,
+            format_func=lambda x: week_display_names[available_weeks.index(x)],
             index=default_week_index
         )
         
-        selected_week_base = weeks_data['file_bases'][selected_week_index]
-        
+        # Load summary data for the selected week
         try:
-            week_files = {
-                'html': find_week_file(service, "Industry_Report", selected_week_base, folder_ids['allatonce']),
-                'raw': find_week_file(service, "raw_info", selected_week_base, folder_ids['raw_info_sources']),
-                'summary': find_week_file(service, "summary", selected_week_base, folder_ids['summary_sources'])
-            }
-        except Exception as e:
-            st.error(str(e))
-            st.stop()
-        
-        try:
-            summary_file = download_file(service, week_files['summary'])
+            summary_file_id = find_file(service, f"summary_{selected_week}.csv", parent_id=folder_ids['summary_sources'])
+            summary_file = download_file(service, summary_file_id)
             summary_df = read_csv_content(summary_file)
             companies = summary_df['Company'].unique().tolist()
             companies = ["View All at Once"] + companies
         except Exception as e:
             st.error(f"Could not load summary data: {str(e)}")
-            st.stop()
+            return
         
+        # Company selection with "View All at Once" as default
         selected_company = st.selectbox(
             "Select Company", 
             options=companies,
-            index=0
+            index=0  # Default to "View All at Once"
         )
         
+        # Single button to toggle details view
         if st.button("Show Details"):
-            st.session_state.show_details = selected_company != "View All at Once"
+            if selected_company == "View All at Once":
+                st.session_state.show_details = False
+            else:
+                st.session_state.show_details = True
             st.rerun()
     
-    if not st.session_state.show_details:
-        show_all_at_once_view(service, week_files['html'])
+    # Determine which view to show
+    if selected_company == "View All at Once" or not st.session_state.show_details:
+        show_all_at_once_view(service, folder_ids['allatonce'], selected_week)
     else:
-        show_dashboard_view(service, week_files, selected_company, summary_df)
-
+        show_dashboard_view(service, folder_ids, selected_week, selected_company, summary_df)
+        
 if __name__ == "__main__":
     main()
