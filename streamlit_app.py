@@ -1,4 +1,3 @@
-
 import streamlit as st
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -234,10 +233,14 @@ def get_available_weeks(service, folder_id):
     for item in items:
         if 'week' in item['name'].lower():
             try:
-                # Extract week number and month name
+                # Extract week number and month name (handling both with and without year suffix)
                 parts = item['name'].lower().split('week')
                 if len(parts) > 1:
                     week_month_part = parts[1].split('.')[0]  # Remove file extension
+                    
+                    # Remove year suffix if present (e.g., "'25")
+                    if "'" in week_month_part:
+                        week_month_part = week_month_part.split("'")[0]
                     
                     # Separate week number from month name
                     week_num_str = ''
@@ -298,7 +301,13 @@ def show_all_at_once_view(service, allatonce_folder_id, selected_week):
     st.subheader(f"You are viewing the complete industry report for {display_week}")
     
     try:
-        html_file_id = find_file(service, f"industry_report_{selected_week}.html", parent_id=allatonce_folder_id)
+        # Handle both old and new naming conventions
+        try:
+            html_file_id = find_file(service, f"industry_report_{selected_week}.html", parent_id=allatonce_folder_id)
+        except:
+            # Try with '25 suffix if original not found
+            html_file_id = find_file(service, f"industry_report_{selected_week}'25.html", parent_id=allatonce_folder_id)
+            
         html_file = download_file(service, html_file_id)
         html_content = read_html_content(html_file)
         
@@ -318,7 +327,12 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
     st.subheader(f"You are viewing {display_week} data")
     
     try:
-        raw_file_id = find_file(service, f"raw_info_{selected_week}.xlsx", parent_id=folder_ids['raw_info_sources'])
+        # Handle both old and new naming conventions for raw data
+        try:
+            raw_file_id = find_file(service, f"raw_info_{selected_week}.xlsx", parent_id=folder_ids['raw_info_sources'])
+        except:
+            raw_file_id = find_file(service, f"raw_info_{selected_week}'25.xlsx", parent_id=folder_ids['raw_info_sources'])
+            
         raw_file = download_file(service, raw_file_id)
         raw_df = read_excel_content(raw_file)
     except Exception as e:
@@ -457,18 +471,6 @@ def main():
         st.error(f"Could not retrieve available weeks: {str(e)}")
         return
     
-    # Add logo to the top middle of the page
-    # st.markdown(
-    #     """
-    #     <div class='logo-container'>
-    #         <img src='BorderPlus_logo.png'>
-    #     </div>
-    #     """,
-    #     unsafe_allow_html=True
-    # )
-    # image = Image.open('BorderPlus_logo.png')
-    # st.image(image, width=200)
-    
     with st.sidebar:
         
         image = Image.open('BorderPlus_logo.png')
@@ -485,7 +487,12 @@ def main():
         
         # Load summary data for the selected week
         try:
-            summary_file_id = find_file(service, f"summary_{selected_week}.csv", parent_id=folder_ids['summary_sources'])
+            # Handle both old and new naming conventions for summary file
+            try:
+                summary_file_id = find_file(service, f"summary_{selected_week}.csv", parent_id=folder_ids['summary_sources'])
+            except:
+                summary_file_id = find_file(service, f"summary_{selected_week}'25.csv", parent_id=folder_ids['summary_sources'])
+                
             summary_file = download_file(service, summary_file_id)
             summary_df = read_csv_content(summary_file)
             companies = summary_df['Company'].unique().tolist()
