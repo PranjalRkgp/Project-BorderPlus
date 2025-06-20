@@ -231,66 +231,97 @@ def get_available_weeks(service, folder_id):
                   'july', 'august', 'september', 'october', 'november', 'december']
     
     for item in items:
-        if item['name'].lower().startswith('week'):
+        if 'week' in item['name'].lower():
             try:
-                # Remove file extensions and get base name
+                # Handle different file naming patterns
                 filename = item['name'].lower()
-                for ext in ['.html', '.xlsx', '.csv']:
-                    filename = filename.replace(ext, '')
                 
-                # Extract week number, month, and year
-                parts = filename.split('week')
-                if len(parts) < 2:
-                    continue
+                # Extract the base name without extension
+                base_name = filename.split('.')[0]
                 
-                rest = parts[1]  # e.g., "2june'25"
+                # Extract the week portion (could be prefixed or not)
+                if 'industry_report' in base_name:
+                    week_part = base_name.split('_')[-1]  # "week2june25"
+                else:
+                    week_part = base_name  # "week2june'25"
+                
+                # Standardize by removing apostrophe if present
+                week_part = week_part.replace("'", "")
                 
                 # Extract week number
                 week_num_str = ''
-                i = 0
-                while i < len(rest) and rest[i].isdigit():
-                    week_num_str += rest[i]
+                i = 4  # skip "week"
+                while i < len(week_part) and week_part[i].isdigit():
+                    week_num_str += week_part[i]
                     i += 1
                 
                 if not week_num_str:
                     continue
                 
                 week_num = int(week_num_str)
-                remaining = rest[i:]  # e.g., "june'25"
+                remaining = week_part[i:]  # "june25"
                 
                 # Extract month and year
                 month_part = ''
                 year_part = '25'  # default
                 
-                if "'" in remaining:
-                    month_part = remaining.split("'")[0]
-                    year_part = remaining.split("'")[1] if len(remaining.split("'")) > 1 else '25'
-                else:
-                    month_part = remaining
+                # Find month name
+                for month in month_order:
+                    if remaining.startswith(month):
+                        month_part = month
+                        remaining = remaining[len(month):]
+                        break
                 
-                month_name = month_part.lower()
-                if month_name not in month_order:
+                if not month_part:
                     continue
                 
-                month_num = month_order.index(month_name) + 1
+                # Get year (remaining digits after month)
+                year_part = remaining if remaining else '25'
                 year_num = 2000 + int(year_part) if len(year_part) == 2 else int(year_part)
+                month_num = month_order.index(month_part) + 1
+                
+                # Create consistent identifier (without apostrophe)
+                identifier = f'week{week_num}{month_part}{year_part}'
                 
                 weeks.append({
-                    'identifier': f'week{week_num}{month_name}\'{year_part[-2:]}',  # week2june'25
+                    'identifier': identifier,
                     'sort_key': (year_num, month_num, week_num),
-                    'display_name': f"Week {week_num} {month_name.capitalize()}'{year_part[-2:]}"  # Week 2 June'25
+                    'display_name': f"Week {week_num} {month_part.capitalize()} '{year_part[-2:]}"
                 })
             except Exception as e:
                 print(f"Error processing file {item['name']}: {str(e)}")
                 continue
     
-    # Sort by year, month, then week
-    weeks.sort(key=lambda x: x['sort_key'])
+    # Remove duplicates and sort
+    unique_weeks = {w['identifier']: w for w in weeks}.values()
+    sorted_weeks = sorted(unique_weeks, key=lambda x: x['sort_key'])
     
     return {
-        'identifiers': [w['identifier'] for w in weeks],
-        'display_names': [w['display_name'] for w in weeks]
+        'identifiers': [w['identifier'] for w in sorted_weeks],
+        'display_names': [w['display_name'] for w in sorted_weeks]
     }
+
+def find_week_file(service, base_name, week_id, parent_id):
+    # Try multiple possible filename formats
+    patterns = [
+        f"{base_name}_{week_id}",
+        f"{base_name}_{week_id.replace("'", "")}",
+        week_id,
+        week_id.replace("'", "")
+    ]
+    
+    for pattern in patterns:
+        try:
+            # Try with different extensions
+            for ext in ['.html', '.xlsx', '.csv']:
+                try:
+                    return find_file(service, f"{pattern}{ext}", parent_id)
+                except:
+                    continue
+        except:
+            continue
+    
+    raise Exception(f"No matching file found for week {week_id}")
 
 def download_file(service, file_id):
     request = service.files().get_media(fileId=file_id)
@@ -320,7 +351,7 @@ def show_all_at_once_view(service, allatonce_folder_id, selected_week):
     st.subheader(f"You are viewing the complete industry report for {display_week}")
     
     try:
-        html_file_id = find_file(service, f"industry_report_{selected_week}.html", parent_id=allatonce_folder_id)
+        html_file_id = find_week_file(service, "Industry_Report", selected_week, allatonce_folder_id)
         html_file = download_file(service, html_file_id)
         html_content = read_html_content(html_file)
         
@@ -339,7 +370,7 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
     st.subheader(f"You are viewing {display_week} data")
     
     try:
-        raw_file_id = find_file(service, f"raw_info_{selected_week}.xlsx", parent_id=folder_ids['raw_info_sources'])
+        raw_file_id = find_week_file(service, "raw_info", selected_week, folder_ids['raw_info_sources'])
         raw_file = download_file(service, raw_file_id)
         raw_df = read_excel_content(raw_file)
     except Exception as e:
@@ -481,7 +512,7 @@ def main():
         )
         
         try:
-            summary_file_id = find_file(service, f"summary_{selected_week}.csv", parent_id=folder_ids['summary_sources'])
+            summary_file_id = find_week_file(service, "summary", selected_week, folder_ids['summary_sources'])
             summary_file = download_file(service, summary_file_id)
             summary_df = read_csv_content(summary_file)
             companies = summary_df['Company'].unique().tolist()
