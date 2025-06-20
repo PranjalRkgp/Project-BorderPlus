@@ -12,7 +12,7 @@ from pathlib import Path
 from PIL import Image
 import re
 
-icon=Image.open('BorderPlus_icon.png')
+icon = Image.open('BorderPlus_icon.png')
 # Set page config with light theme
 st.set_page_config(
     page_title="Competitor Insights Dashboard",
@@ -21,7 +21,206 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# [Previous CSS and authentication code remains the same...]
+# Add custom CSS for light blue and white theme
+def add_custom_css():
+    st.markdown("""
+    <style>
+        html, body, .stApp {
+            background-color: #F0F6FF !important;
+            color: #1A1A1A !important;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        /* Headers */
+        h1, h2, h3, h4, h5, h6 {
+            color: #165BAA !important;
+        }
+
+        /* Sidebar */
+        [data-testid="stSidebar"] {
+            background-color: #E6F0FF !important;
+            border-right: 1px solid #CCE0FF;
+        }
+
+        .stSidebar label, .stSidebar h3, .stSidebar h2 {
+            color: #165BAA !important;
+            font-weight: 600;
+        }
+
+        /* Generic labels and small headers */
+        .css-1lcbmhc, .css-1v0mbdj, .stText, label {
+            color: #165BAA !important;
+            font-size: 16px !important;
+        }
+
+        /* Buttons */
+        .stButton>button {
+            background-color: #0B5ED7 !important;
+            color: #FFFFFF !important;
+            border-radius: 8px;
+            font-weight: 600;
+            padding: 0.6rem 1.2rem;
+            border: none;
+        }
+
+        .stButton>button:hover {
+            background-color: #084BC1 !important;
+        }
+
+        /* Tabs */
+        .stTabs [data-baseweb="tab"] {
+            background-color: #D0E1FF !important;
+            color: #165BAA !important;
+            font-weight: 500;
+            border-radius: 10px 10px 0 0;
+            padding: 10px 18px;
+            border: 1px solid #A6C8FF;
+            border-bottom: none;
+        }
+
+        .stTabs [aria-selected="true"] {
+            background-color: #0B5ED7 !important;
+            color: #FFFFFF !important;
+        }
+
+        /* Info Cards */
+        .custom-container, .info-card {
+            background-color: #FFFFFF;
+            border: 1px solid #A6C8FF;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+
+        .info-card, .info-card * {
+            color: #1A1A1A !important;
+        }
+
+        .info-card .header {
+            color: #0B5ED7 !important;
+            font-weight: 600;
+        }
+
+        /* Dropdown Selectbox */
+        .stSelectbox>div>div {
+            background-color: #FFFFFF !important;
+            color: #1A1A1A !important;
+            border: 1px solid #CCE0FF !important;
+            border-radius: 6px;
+        }
+
+        .stSelectbox ul {
+            background-color: #FFFFFF !important;
+            color: #1A1A1A !important;
+        }
+
+        /* Tables */
+        th {
+            background-color: #165BAA !important;
+            color: white !important;
+        }
+
+        tr:nth-child(even) {
+            background-color: #F7FAFF !important;
+        }
+
+        tr:nth-child(odd) {
+            background-color: #FFFFFF !important;
+        }
+
+        /* Inputs */
+        input, textarea {
+            background-color: #FFFFFF !important;
+            border: 1px solid #CCE0FF !important;
+            color: #1A1A1A !important;
+        }
+
+        /* Alerts */
+        .stAlert {
+            background-color: #6ca3f5 !important;
+            border-left: 4px solid #0B5ED7 !important;
+            color: #1A1A1A !important;
+        }
+
+        /* Links */
+        a {
+            color: #0B5ED7 !important;
+        }
+
+        a:hover {
+            color: #084BC1 !important;
+            text-decoration: underline;
+        }
+        
+        /* Disabled elements */
+        .disabled {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        /* New styles for logo positioning */
+        .logo-container {
+            margin-top: 0rem !important;
+            margin-bottom: 0rem !important;
+            padding-top: 0 !important;
+        }
+        
+        .stApp {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+        }
+        
+        /* Remove extra padding from main content */
+        .main .block-container {
+            padding-top: 0 !important;
+        }
+
+        /* Remove all padding/margin at the top */
+        .stApp > div:first-child {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+        }
+        
+        /* Target the logo container specifically */
+        div[data-testid="column"]:has(img[src*="BorderPlus_logo.png"]) {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+        }        
+    </style>
+    """, unsafe_allow_html=True)
+
+add_custom_css()
+
+# Authentication with token caching
+def authenticate():
+    try:
+        creds = Credentials(
+            token=None,
+            refresh_token=st.secrets["google"]["refresh_token"],
+            client_id=st.secrets["google"]["client_id"],
+            client_secret=st.secrets["google"]["client_secret"],
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=["https://www.googleapis.com/auth/drive.readonly"]
+        )
+        creds.refresh(Request())
+        return creds
+    except Exception as e:
+        st.error(f"Authentication failed: {str(e)}")
+        return None
+
+# Helper functions
+def find_file(service, name, parent_id=None, mime_type=None):
+    query = f"name = '{name}'"
+    if parent_id:
+        query += f" and '{parent_id}' in parents"
+    if mime_type:
+        query += f" and mimeType = '{mime_type}'"
+    results = service.files().list(q=query, fields="files(id, name, mimeType)").execute()
+    files = results.get('files', [])
+    if not files:
+        raise Exception(f"'{name}' not found.")
+    return files[0]['id']
 
 def get_available_weeks(service, folder_id):
     query = f"'{folder_id}' in parents"
@@ -80,8 +279,28 @@ def find_file_with_fallback(service, base_name, parent_id, extensions=['.html', 
     
     raise Exception(f"Could not find any matching file for base name: {base_name}")
 
-# [Previous helper functions remain the same...]
+def download_file(service, file_id):
+    request = service.files().get_media(fileId=file_id)
+    fh = io.BytesIO()
+    downloader = MediaIoBaseDownload(fh, request)
+    done = False
+    while done is False:
+        status, done = downloader.next_chunk()
+    fh.seek(0)
+    return fh
 
+def read_html_content(file_content):
+    content = file_content.read().decode('utf-8')
+    content = content.replace('<body>', '<body style="background-color: white; color: #333;">')
+    return content
+
+def read_excel_content(file_content):
+    return pd.read_excel(file_content)
+
+def read_csv_content(file_content):
+    return pd.read_csv(file_content)
+
+# View functions
 def show_all_at_once_view(service, allatonce_folder_id, selected_week_file):
     st.title("Industry Report - All at Once View")
     display_name = selected_week_file.replace('week', 'Week ').title()
@@ -116,7 +335,103 @@ def show_dashboard_view(service, folder_ids, selected_week_file, selected_compan
         st.error(f"Could not load raw data: {str(e)}")
         return
     
-    # [Rest of the dashboard view code remains the same...]
+    company_summary = summary_df[summary_df['Company'] == selected_company].iloc[0]
+    company_raw_data = raw_df[raw_df['Company'] == selected_company]
+    
+    tab_names = [
+        "Summary",
+        "New Market",
+        "New Product",
+        "Pricing Changes",
+        "Funding",
+        "MOUs",
+        "Hiring",
+        "Leadership Changes",
+        "Events",
+        "Partnerships"
+    ]
+    
+    tabs = st.tabs(tab_names)
+    
+    with tabs[0]:  # Summary tab
+        st.subheader(f"Summary for {selected_company}")
+        if pd.notna(company_summary['Summary']):
+            st.markdown(f"""
+            <div class="info-card">
+                <div class="content">
+                    {company_summary['Summary']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.info("No summary available for this company.")
+            
+        if pd.notna(company_summary['References']):
+            st.markdown("**References:**")
+            references = company_summary['References'].split(';')
+            for ref in references:
+                ref = ref.strip()
+                if ref:
+                    st.markdown(f"- [{ref}]({ref})")
+    
+    # Define the mapping between tabs and corresponding columns
+    tab_fields = {
+        "New Market": "new_market",
+        "New Product": "new_product",
+        "Pricing Changes": "pricing_changes",
+        "Funding": "funding",
+        "MOUs": "mous",
+        "Hiring": "hiring",
+        "Leadership Changes": "leadership_changes",
+        "Events": "events",
+        "Partnerships": "partnerships"
+    }
+    
+    # Create tabs for each field
+    for tab_name, field in tab_fields.items():
+        with tabs[tab_names.index(tab_name)]:
+            st.subheader(tab_name)
+            
+            # Filter data for this company and field (excluding empty, None, and 'none' values)
+            relevant_data = company_raw_data[
+                (company_raw_data[field].astype(str).str.lower().ne('none')) & 
+                (company_raw_data[field].astype(str).str.lower().ne('nan')) & 
+                (company_raw_data[field].astype(str).str.lower().ne(''))
+            ]
+            
+            if relevant_data.empty:
+                st.info(f"No {tab_name.lower()} information available for this week.")
+            else:
+                # Reset index to ensure unique identifiers for each row
+                relevant_data = relevant_data.reset_index(drop=True)
+                
+                for idx, row in relevant_data.iterrows():
+                    # Create a unique key for each button using tab_name and index
+                    button_key = f"see_more_{tab_name.lower()}_{idx}"
+                    
+                    # Create a card for each entry
+                    with st.container():
+                        st.markdown(f"""
+                            <div class="info-card">
+                                <div class="content">
+                                    <strong>{row[field]}</strong>
+                                </div>
+                                <div>Source: {row['Source']}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Add a "See More" button with unique key
+                        if st.button(f"See More Details", key=button_key):
+                            # Create a modal to show more details
+                            with st.expander("Full Details", expanded=True):
+                                st.markdown(f"**URL:** [{row['URL']}]({row['URL']})")
+                                st.markdown(f"**Date:** {row['Date']}")
+                                st.markdown("**Original Information:**")
+                                st.markdown(f"""
+                                <div class="custom-container">
+                                    {row['Information']}
+                                </div>
+                                """, unsafe_allow_html=True)
 
 def main():
     # Initialize session state variables
@@ -177,7 +492,26 @@ def main():
             st.error(f"Could not load summary data: {str(e)}")
             return
         
-        # [Rest of the main function remains the same...]
-
+        # Company selection with "View All at Once" as default
+        selected_company = st.selectbox(
+            "Select Company", 
+            options=companies,
+            index=0  # Default to "View All at Once"
+        )
+        
+        # Single button to toggle details view
+        if st.button("Show Details"):
+            if selected_company == "View All at Once":
+                st.session_state.show_details = False
+            else:
+                st.session_state.show_details = True
+            st.rerun()
+    
+    # Determine which view to show
+    if selected_company == "View All at Once" or not st.session_state.show_details:
+        show_all_at_once_view(service, folder_ids['allatonce'], selected_week_file)
+    else:
+        show_dashboard_view(service, folder_ids, selected_week_file, selected_company, summary_df)
+        
 if __name__ == "__main__":
     main()
