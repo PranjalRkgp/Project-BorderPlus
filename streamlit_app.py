@@ -1,4 +1,3 @@
-
 import streamlit as st
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -12,7 +11,7 @@ import json
 from pathlib import Path
 from PIL import Image
 
-icon=Image.open('BorderPlus_icon.png')
+icon = Image.open('BorderPlus_icon.png')
 # Set page config with light theme
 st.set_page_config(
     page_title="Competitor Insights Dashboard",
@@ -232,39 +231,62 @@ def get_available_weeks(service, folder_id):
                   'july', 'august', 'september', 'october', 'november', 'december']
     
     for item in items:
-        if 'week' in item['name'].lower():
+        if item['name'].lower().startswith('week'):
             try:
-                # Extract week number and month name
-                parts = item['name'].lower().split('week')
-                if len(parts) > 1:
-                    week_month_part = parts[1].split('.')[0]  # Remove file extension
-                    
-                    # Separate week number from month name
-                    week_num_str = ''
-                    month_name = ''
-                    for i, c in enumerate(week_month_part):
-                        if c.isdigit():
-                            week_num_str += c
-                        else:
-                            month_name = week_month_part[i:]
-                            break
-                    
-                    if week_num_str and month_name in month_order:
-                        week_num = int(week_num_str)
-                        month_num = month_order.index(month_name) + 1
-                        weeks.append({
-                            'identifier': f'week{week_num}{month_name}',
-                            'sort_key': (month_num, week_num),
-                            'display_name': f"Week {week_num} {month_name.capitalize()}"
-                        })
+                # Remove file extensions and get base name
+                filename = item['name'].lower()
+                for ext in ['.html', '.xlsx', '.csv']:
+                    filename = filename.replace(ext, '')
+                
+                # Extract week number, month, and year
+                parts = filename.split('week')
+                if len(parts) < 2:
+                    continue
+                
+                rest = parts[1]  # e.g., "2june'25"
+                
+                # Extract week number
+                week_num_str = ''
+                i = 0
+                while i < len(rest) and rest[i].isdigit():
+                    week_num_str += rest[i]
+                    i += 1
+                
+                if not week_num_str:
+                    continue
+                
+                week_num = int(week_num_str)
+                remaining = rest[i:]  # e.g., "june'25"
+                
+                # Extract month and year
+                month_part = ''
+                year_part = '25'  # default
+                
+                if "'" in remaining:
+                    month_part = remaining.split("'")[0]
+                    year_part = remaining.split("'")[1] if len(remaining.split("'")) > 1 else '25'
+                else:
+                    month_part = remaining
+                
+                month_name = month_part.lower()
+                if month_name not in month_order:
+                    continue
+                
+                month_num = month_order.index(month_name) + 1
+                year_num = 2000 + int(year_part) if len(year_part) == 2 else int(year_part)
+                
+                weeks.append({
+                    'identifier': f'week{week_num}{month_name}\'{year_part[-2:]}',  # week2june'25
+                    'sort_key': (year_num, month_num, week_num),
+                    'display_name': f"Week {week_num} {month_name.capitalize()}'{year_part[-2:]}"  # Week 2 June'25
+                })
             except Exception as e:
                 print(f"Error processing file {item['name']}: {str(e)}")
                 continue
     
-    # Sort by month number, then by week number (oldest to newest)
+    # Sort by year, month, then week
     weeks.sort(key=lambda x: x['sort_key'])
     
-    # Return both identifiers and display names
     return {
         'identifiers': [w['identifier'] for w in weeks],
         'display_names': [w['display_name'] for w in weeks]
@@ -294,7 +316,7 @@ def read_csv_content(file_content):
 # View functions
 def show_all_at_once_view(service, allatonce_folder_id, selected_week):
     st.title("Industry Report - All at Once View")
-    display_week = selected_week.replace('week', 'Week ').title()
+    display_week = selected_week.replace('week', 'Week ').replace("'", "'").title()
     st.subheader(f"You are viewing the complete industry report for {display_week}")
     
     try:
@@ -302,7 +324,6 @@ def show_all_at_once_view(service, allatonce_folder_id, selected_week):
         html_file = download_file(service, html_file_id)
         html_content = read_html_content(html_file)
         
-        # Wrap in a container with custom styling
         st.markdown(f"""
         <div class="custom-container">
             {html_content}
@@ -313,7 +334,7 @@ def show_all_at_once_view(service, allatonce_folder_id, selected_week):
         st.error(f"Could not load industry report: {str(e)}")
 
 def show_dashboard_view(service, folder_ids, selected_week, selected_company, summary_df):
-    display_week = selected_week.replace('week', 'Week ').title()
+    display_week = selected_week.replace('week', 'Week ').replace("'", "'").title()
     st.title(f"{selected_company} Insights Dashboard")
     st.subheader(f"You are viewing {display_week} data")
     
@@ -364,7 +385,6 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
                 if ref:
                     st.markdown(f"- [{ref}]({ref})")
     
-    # Define the mapping between tabs and corresponding columns
     tab_fields = {
         "New Market": "new_market",
         "New Product": "new_product",
@@ -377,12 +397,10 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
         "Partnerships": "partnerships"
     }
     
-    # Create tabs for each field
     for tab_name, field in tab_fields.items():
         with tabs[tab_names.index(tab_name)]:
             st.subheader(tab_name)
             
-            # Filter data for this company and field (excluding empty, None, and 'none' values)
             relevant_data = company_raw_data[
                 (company_raw_data[field].astype(str).str.lower().ne('none')) & 
                 (company_raw_data[field].astype(str).str.lower().ne('nan')) & 
@@ -392,14 +410,11 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
             if relevant_data.empty:
                 st.info(f"No {tab_name.lower()} information available for this week.")
             else:
-                # Reset index to ensure unique identifiers for each row
                 relevant_data = relevant_data.reset_index(drop=True)
                 
                 for idx, row in relevant_data.iterrows():
-                    # Create a unique key for each button using tab_name and index
                     button_key = f"see_more_{tab_name.lower()}_{idx}"
                     
-                    # Create a card for each entry
                     with st.container():
                         st.markdown(f"""
                             <div class="info-card">
@@ -410,9 +425,7 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
                             </div>
                         """, unsafe_allow_html=True)
                         
-                        # Add a "See More" button with unique key
                         if st.button(f"See More Details", key=button_key):
-                            # Create a modal to show more details
                             with st.expander("Full Details", expanded=True):
                                 st.markdown(f"**URL:** [{row['URL']}]({row['URL']})")
                                 st.markdown(f"**Date:** {row['Date']}")
@@ -424,7 +437,6 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
                                 """, unsafe_allow_html=True)
 
 def main():
-    # Initialize session state variables
     if 'show_details' not in st.session_state:
         st.session_state.show_details = False
     
@@ -451,31 +463,16 @@ def main():
         available_weeks = weeks_data['identifiers']
         week_display_names = weeks_data['display_names']
         
-        # Default to latest week (last in sorted list)
         default_week_index = len(available_weeks) - 1 if available_weeks else 0
     except Exception as e:
         st.error(f"Could not retrieve available weeks: {str(e)}")
         return
     
-    # Add logo to the top middle of the page
-    # st.markdown(
-    #     """
-    #     <div class='logo-container'>
-    #         <img src='BorderPlus_logo.png'>
-    #     </div>
-    #     """,
-    #     unsafe_allow_html=True
-    # )
-    # image = Image.open('BorderPlus_logo.png')
-    # st.image(image, width=200)
-    
     with st.sidebar:
-        
         image = Image.open('BorderPlus_logo.png')
         st.image(image)
         st.header("Competitor Analysis Controls")
         
-        # Week selection with formatted display names
         selected_week = st.selectbox(
             "Select Week",
             options=available_weeks,
@@ -483,7 +480,6 @@ def main():
             index=default_week_index
         )
         
-        # Load summary data for the selected week
         try:
             summary_file_id = find_file(service, f"summary_{selected_week}.csv", parent_id=folder_ids['summary_sources'])
             summary_file = download_file(service, summary_file_id)
@@ -494,14 +490,12 @@ def main():
             st.error(f"Could not load summary data: {str(e)}")
             return
         
-        # Company selection with "View All at Once" as default
         selected_company = st.selectbox(
             "Select Company", 
             options=companies,
-            index=0  # Default to "View All at Once"
+            index=0
         )
         
-        # Single button to toggle details view
         if st.button("Show Details"):
             if selected_company == "View All at Once":
                 st.session_state.show_details = False
@@ -509,7 +503,6 @@ def main():
                 st.session_state.show_details = True
             st.rerun()
     
-    # Determine which view to show
     if selected_company == "View All at Once" or not st.session_state.show_details:
         show_all_at_once_view(service, folder_ids['allatonce'], selected_week)
     else:
