@@ -232,20 +232,23 @@ def get_available_weeks(service, folder_id):
                   'july', 'august', 'september', 'october', 'november', 'december']
     
     for item in items:
-        if 'week' in item['name'].lower():
+        lower_name = item['name'].lower()
+        if 'industry_report_week' in lower_name:
             try:
-                # Extract week number, month name, and year suffix using regex
-                match = re.match(r'week(\d+)([a-z]+)(\'?\d*)', item['name'].lower())
+                # Extract week number, month name, and year suffix
+                # Handles both "week2june 25" and "week2june'25" formats
+                match = re.match(r'industry_report_week(\d+)([a-z]+)([ _\'\-]?\d*)', lower_name)
                 if match:
                     week_num = int(match.group(1))
                     month_name = match.group(2)
-                    year_suffix = match.group(3) if match.group(3) else ''
+                    year_suffix = match.group(3).strip().replace(" ", "'").replace("_", "'").replace("-", "'")
                     
                     if month_name in month_order:
                         month_num = month_order.index(month_name) + 1
+                        base_name = f"week{week_num}{month_name}{year_suffix}"
                         weeks.append({
-                            'file_name': item['name'].split('.')[0],  # Store full filename without extension
-                            'identifier': f'week{week_num}{month_name}{year_suffix}',
+                            'file_name': base_name,  # Store base filename without extension
+                            'identifier': base_name,
                             'sort_key': (month_num, week_num),
                             'display_name': f"Week {week_num} {month_name.capitalize()}{year_suffix}"
                         })
@@ -256,7 +259,6 @@ def get_available_weeks(service, folder_id):
     # Sort by month number, then by week number (oldest to newest)
     weeks.sort(key=lambda x: x['sort_key'])
     
-    # Return both identifiers and display names
     return {
         'file_names': [w['file_name'] for w in weeks],
         'display_names': [w['display_name'] for w in weeks]
@@ -264,9 +266,13 @@ def get_available_weeks(service, folder_id):
 
 def find_file_with_fallback(service, base_name, parent_id, extensions=['.html', '.xlsx', '.csv']):
     """Try to find file with different naming patterns and extensions"""
+    # Try different variations of the base name
     patterns_to_try = [
-        base_name,
-        f"{base_name.split('_')[0]}_{base_name.split('_')[1].replace("'", "")}"  # Try without year suffix
+        f"Industry_Report_{base_name.replace('week', 'week').replace("'", " ")}",  # "week2june 25"
+        f"Industry_Report_{base_name.replace('week', 'week')}",  # "week2june'25"
+        f"industry_report_{base_name.replace('week', 'week').replace("'", " ")}",  # lowercase version
+        f"industry_report_{base_name.replace('week', 'week')}",  # lowercase with apostrophe
+        base_name  # Try the original base name as last resort
     ]
     
     for pattern in patterns_to_try:
