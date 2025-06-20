@@ -463,6 +463,12 @@ def main():
         
         # Default to latest week (last in sorted list)
         default_week_index = len(available_week_files) - 1 if available_week_files else 0
+        
+        # Ensure we have at least one week available
+        if not available_week_files:
+            st.error("No week files found in the 'allatonce' folder.")
+            return
+            
     except Exception as e:
         st.error(f"Could not retrieve available weeks: {str(e)}")
         return
@@ -482,6 +488,10 @@ def main():
         
         # Load summary data for the selected week
         try:
+            if not selected_week_file:
+                st.error("No week selected")
+                return
+                
             base_name = f"summary_{selected_week_file}"
             summary_file_id = find_file_with_fallback(service, base_name, folder_ids['summary_sources'], ['.csv'])
             summary_file = download_file(service, summary_file_id)
@@ -490,7 +500,7 @@ def main():
             companies = ["View All at Once"] + companies
         except Exception as e:
             st.error(f"Could not load summary data: {str(e)}")
-            return
+            st.stop()  # Stop execution if we can't load summary data
         
         # Company selection with "View All at Once" as default
         selected_company = st.selectbox(
@@ -506,12 +516,6 @@ def main():
             else:
                 st.session_state.show_details = True
             st.rerun()
-    
-    # Determine which view to show
-    if selected_company == "View All at Once" or not st.session_state.show_details:
-        show_all_at_once_view(service, folder_ids['allatonce'], selected_week_file)
-    else:
-        show_dashboard_view(service, folder_ids, selected_week_file, selected_company, summary_df)
         
 if __name__ == "__main__":
     main()
