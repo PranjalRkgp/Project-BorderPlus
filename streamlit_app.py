@@ -433,7 +433,18 @@ def main():
     except Exception as e:
         st.error(f"Authentication failed: {str(e)}")
         return
-    
+       ## 
+    # In main(), right after authentication:
+    try:
+        st.write("Files in allatonce folder:")
+        all_files = service.files().list(
+            q=f"'{folder_ids['allatonce']}' in parents",
+            fields="files(name)"
+        ).execute()
+        st.write(all_files['files'])
+    except Exception as e:
+        st.error(f"Drive listing failed: {e}")
+        ###
     try:
         parent_folder_id = find_file(service, "Competitor Reporting", mime_type="application/vnd.google-apps.folder")
         folder_ids = {
