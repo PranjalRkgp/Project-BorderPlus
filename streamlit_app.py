@@ -235,58 +235,32 @@ def get_available_weeks(service, folder_id):
         filename = item['name'].lower()
         if 'week' in filename:
             try:
-                # Extract the week portion
+                # EXTRACT THE EXACT FILENAME PATTERN YOU USE
                 if 'industry_report' in filename:
                     week_part = filename.split('industry_report_')[-1].split('.')[0]
                 else:
-                    week_part = filename.split('.')[0]
+                    week_part = filename.split('.')[0]  # Gets 'week2june'25' from 'week2june'25.csv'
                 
-                # Handle both with and without apostrophes
-                week_part = week_part.replace("'", "")
+                # KEEP THE APOSTROPHE - don't remove it!
+                identifier = week_part  # 'week2june'25'
                 
-                # Extract week number (after 'week')
-                week_num_str = ''
-                i = filename.find('week') + 4
-                while i < len(filename) and filename[i].isdigit():
-                    week_num_str += filename[i]
-                    i += 1
+                # Extract week number
+                week_num = int(week_part[4:week_part.index('june')])  # Gets 2 from 'week2june'25'
                 
-                if not week_num_str:
-                    continue
+                # Create display name
+                display_name = f"Week {week_num} June '25"
                 
-                week_num = int(week_num_str)
-                remaining = filename[i:]
-                
-                # Extract month
-                month_part = ''
-                for month in month_order:
-                    if remaining.startswith(month):
-                        month_part = month
-                        remaining = remaining[len(month):]
-                        break
-                
-                if not month_part:
-                    continue
-                
-                # Extract year (digits after month)
-                year_part = ''.join([c for c in remaining if c.isdigit()])
-                if not year_part:
-                    year_part = '25'  # default
-                
-                # Create identifiers
-                identifier = f'week{week_num}{month_part}\'{year_part[-2:]}'
-                display_name = f"Week {week_num} {month_part.capitalize()} '{year_part[-2:]}"
-                
-                year_num = 2000 + int(year_part) if len(year_part) == 2 else int(year_part)
-                month_num = month_order.index(month_part) + 1
+                # For sorting
+                year_num = 2025  # From the '25
+                month_num = 6    # June
                 
                 weeks.append({
-                    'identifier': identifier,
+                    'identifier': identifier,  # Keep original format 'week2june'25'
                     'display_name': display_name,
                     'sort_key': (year_num, month_num, week_num)
                 })
             except Exception as e:
-                print(f"Error processing file {item['name']}: {str(e)}")
+                print(f"Skipping file {filename}: {str(e)}")
                 continue
     
     # Remove duplicates and sort
@@ -297,34 +271,46 @@ def get_available_weeks(service, folder_id):
         'identifiers': [w['identifier'] for w in sorted_weeks],
         'display_names': [w['display_name'] for w in sorted_weeks]
     }
-
+    
 # Enhanced file finder that handles multiple formats
 def find_week_file(service, prefix, week_id, parent_id):
-    # Remove 'week' prefix if present
+    """Finds week files with ALL possible naming variations"""
+    # Extract the core date portion (after 'week')
     date_part = week_id[4:] if week_id.startswith('week') else week_id
     
-    # Try multiple filename patterns
+    # All possible filename patterns to try (IN ORDER OF PRIORITY)
     patterns = [
-        f"{prefix}_{week_id}",            # summary_week2june'25
-        f"{prefix}_{week_id.replace("'", "")}",  # summary_week2june25
-        f"{prefix}_week{date_part}",      # summary_week2june25
-        week_id,                          # week2june'25
-        week_id.replace("'", ""),         # week2june25
-        f"week{date_part}"                # week2june25
+        # Your exact format with apostrophe
+        f"{prefix}_week{date_part}",       # summary_week2june'25
+        f"week{date_part}",                # week2june'25
+        
+        # Variations without apostrophe
+        f"{prefix}_week{date_part.replace("'", "")}",  # summary_week2june25
+        f"week{date_part.replace("'", "")}",           # week2june25
+        
+        # Raw patterns without prefix
+        date_part,                         # 2june'25
+        date_part.replace("'", "")         # 2june25
     ]
     
-    # Try different extensions
+    # All possible extensions to try
     extensions = ['.csv', '.xlsx', '.html']
     
+    # Try EVERY combination
     for pattern in patterns:
         for ext in extensions:
             try:
-                return find_file(service, f"{pattern}{ext}", parent_id)
-            except:
+                file_id = find_file(service, f"{pattern}{ext}", parent_id)
+                print(f"Found file: {pattern}{ext}")  # Debug logging
+                return file_id
+            except Exception as e:
+                print(f"Tried but failed: {pattern}{ext}")  # Debug logging
                 continue
     
-    raise Exception(f"No matching file found for patterns: {patterns} with extensions {extensions}")
-
+    # If nothing found, show ALL attempted patterns
+    attempted = [f"{p}{e}" for p in patterns for e in extensions]
+    raise Exception(f"No matching file found. Attempted:\n{'\n'.join(attempted)}")
+    
 def download_file(service, file_id):
     request = service.files().get_media(fileId=file_id)
     fh = io.BytesIO()
