@@ -232,35 +232,30 @@ def get_available_weeks(service, folder_id):
                   'july', 'august', 'september', 'october', 'november', 'december']
     
     for item in items:
-        filename = item['name'].lower()
-        if 'week' in filename:
+        filename = item['name']
+        if 'week' in filename.lower():
             try:
-                # EXTRACT THE EXACT FILENAME PATTERN YOU USE
-                if 'industry_report' in filename:
-                    week_part = filename.split('industry_report_')[-1].split('.')[0]
+                # Handle "Industry_Report_week2june 25.html" format
+                if 'industry_report' in filename.lower():
+                    week_part = filename.split('Industry_Report_')[-1].split('.')[0]  # "week2june 25"
                 else:
-                    week_part = filename.split('.')[0]  # Gets 'week2june'25' from 'week2june'25.csv'
+                    week_part = filename.split('.')[0]  # "week2june 25"
                 
-                # KEEP THE APOSTROPHE - don't remove it!
-                identifier = week_part  # 'week2june'25'
+                # Extract components from "week2june 25"
+                week_num = int(''.join(filter(str.isdigit, week_part.split('week')[1].split('june')[0])))
+                year_part = week_part.split(' ')[-1]  # "25"
                 
-                # Extract week number
-                week_num = int(week_part[4:week_part.index('june')])  # Gets 2 from 'week2june'25'
-                
-                # Create display name
-                display_name = f"Week {week_num} June '25"
-                
-                # For sorting
-                year_num = 2025  # From the '25
-                month_num = 6    # June
+                # Create identifiers
+                identifier = f'week{week_num}june {year_part}'  # "week2june 25"
+                display_name = f"Week {week_num} June {year_part}"
                 
                 weeks.append({
-                    'identifier': identifier,  # Keep original format 'week2june'25'
+                    'identifier': identifier,
                     'display_name': display_name,
-                    'sort_key': (year_num, month_num, week_num)
+                    'sort_key': (int("20" + year_part), 6, week_num)  # 2025, June (6), week 2
                 })
             except Exception as e:
-                print(f"Skipping file {filename}: {str(e)}")
+                print(f"Error processing file {filename}: {str(e)}")
                 continue
     
     # Remove duplicates and sort
@@ -271,6 +266,36 @@ def get_available_weeks(service, folder_id):
         'identifiers': [w['identifier'] for w in sorted_weeks],
         'display_names': [w['display_name'] for w in sorted_weeks]
     }
+
+def find_week_file(service, prefix, week_id, parent_id):
+    """Finds week files with space-separated year"""
+    # All possible filename patterns to try
+    patterns = [
+        f"{prefix}_{week_id}",       # "summary_week2june 25"
+        f"{prefix}_{week_id.replace(' ', '')}",  # "summary_week2june25"
+        f"{prefix}_{week_id.replace(' ', "'")}", # "summary_week2june'25"
+        week_id,                     # "week2june 25"
+        week_id.replace(' ', ''),    # "week2june25"
+        week_id.replace(' ', "'")    # "week2june'25"
+    ]
+    
+    # All possible extensions to try
+    extensions = ['.csv', '.xlsx', '.html']
+    
+    # Try EVERY combination
+    for pattern in patterns:
+        for ext in extensions:
+            try:
+                file_id = find_file(service, f"{pattern}{ext}", parent_id)
+                print(f"Found file: {pattern}{ext}")  # Debug logging
+                return file_id
+            except Exception as e:
+                print(f"Tried but failed: {pattern}{ext}")  # Debug logging
+                continue
+    
+    # If nothing found, show ALL attempted patterns
+    attempted = [f"{p}{e}" for p in patterns for e in extensions]
+    raise Exception(f"No matching file found. Attempted:\n{'\n'.join(attempted)}")
     
 # Enhanced file finder that handles multiple formats
 def find_week_file(service, prefix, week_id, parent_id):
