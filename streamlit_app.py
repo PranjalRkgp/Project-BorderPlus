@@ -208,7 +208,7 @@ def authenticate():
         st.error(f"Authentication failed: {str(e)}")
         return None
 
-# Helper functions
+# Helper function to find files
 def find_file(service, name, parent_id=None, mime_type=None):
     query = f"name = '{name}'"
     if parent_id:
@@ -221,6 +221,7 @@ def find_file(service, name, parent_id=None, mime_type=None):
         raise Exception(f"'{name}' not found.")
     return files[0]['id']
 
+# Updated function to get available weeks
 def get_available_weeks(service, folder_id):
     query = f"'{folder_id}' in parents"
     results = service.files().list(q=query, fields="files(name)").execute()
@@ -231,41 +232,33 @@ def get_available_weeks(service, folder_id):
                   'july', 'august', 'september', 'october', 'november', 'december']
     
     for item in items:
-        if 'week' in item['name'].lower():
+        filename = item['name'].lower()
+        if 'week' in filename:
             try:
-                # Handle different file naming patterns
-                filename = item['name'].lower()
-                
-                # Extract the base name without extension
-                base_name = filename.split('.')[0]
-                
-                # Extract the week portion (could be prefixed or not)
-                if 'industry_report' in base_name:
-                    week_part = base_name.split('_')[-1]  # "week2june25"
+                # Extract the week portion
+                if 'industry_report' in filename:
+                    week_part = filename.split('industry_report_')[-1].split('.')[0]
                 else:
-                    week_part = base_name  # "week2june'25"
+                    week_part = filename.split('.')[0]
                 
-                # Standardize by removing apostrophe if present
+                # Handle both with and without apostrophes
                 week_part = week_part.replace("'", "")
                 
-                # Extract week number
+                # Extract week number (after 'week')
                 week_num_str = ''
-                i = 4  # skip "week"
-                while i < len(week_part) and week_part[i].isdigit():
-                    week_num_str += week_part[i]
+                i = filename.find('week') + 4
+                while i < len(filename) and filename[i].isdigit():
+                    week_num_str += filename[i]
                     i += 1
                 
                 if not week_num_str:
                     continue
                 
                 week_num = int(week_num_str)
-                remaining = week_part[i:]  # "june25"
+                remaining = filename[i:]
                 
-                # Extract month and year
+                # Extract month
                 month_part = ''
-                year_part = '25'  # default
-                
-                # Find month name
                 for month in month_order:
                     if remaining.startswith(month):
                         month_part = month
@@ -275,18 +268,22 @@ def get_available_weeks(service, folder_id):
                 if not month_part:
                     continue
                 
-                # Get year (remaining digits after month)
-                year_part = remaining if remaining else '25'
+                # Extract year (digits after month)
+                year_part = ''.join([c for c in remaining if c.isdigit()])
+                if not year_part:
+                    year_part = '25'  # default
+                
+                # Create identifiers
+                identifier = f'week{week_num}{month_part}\'{year_part[-2:]}'
+                display_name = f"Week {week_num} {month_part.capitalize()} '{year_part[-2:]}"
+                
                 year_num = 2000 + int(year_part) if len(year_part) == 2 else int(year_part)
                 month_num = month_order.index(month_part) + 1
                 
-                # Create consistent identifier (without apostrophe)
-                identifier = f'week{week_num}{month_part}{year_part}'
-                
                 weeks.append({
                     'identifier': identifier,
-                    'sort_key': (year_num, month_num, week_num),
-                    'display_name': f"Week {week_num} {month_part.capitalize()} '{year_part[-2:]}"
+                    'display_name': display_name,
+                    'sort_key': (year_num, month_num, week_num)
                 })
             except Exception as e:
                 print(f"Error processing file {item['name']}: {str(e)}")
@@ -301,27 +298,32 @@ def get_available_weeks(service, folder_id):
         'display_names': [w['display_name'] for w in sorted_weeks]
     }
 
-def find_week_file(service, base_name, week_id, parent_id):
-    # Try multiple possible filename formats
+# Enhanced file finder that handles multiple formats
+def find_week_file(service, prefix, week_id, parent_id):
+    # Remove 'week' prefix if present
+    date_part = week_id[4:] if week_id.startswith('week') else week_id
+    
+    # Try multiple filename patterns
     patterns = [
-        f"{base_name}_{week_id}",
-        f"{base_name}_{week_id.replace("'", "")}",
-        week_id,
-        week_id.replace("'", "")
+        f"{prefix}_{week_id}",            # summary_week2june'25
+        f"{prefix}_{week_id.replace("'", "")}",  # summary_week2june25
+        f"{prefix}_week{date_part}",      # summary_week2june25
+        week_id,                          # week2june'25
+        week_id.replace("'", ""),         # week2june25
+        f"week{date_part}"                # week2june25
     ]
     
-    for pattern in patterns:
-        try:
-            # Try with different extensions
-            for ext in ['.html', '.xlsx', '.csv']:
-                try:
-                    return find_file(service, f"{pattern}{ext}", parent_id)
-                except:
-                    continue
-        except:
-            continue
+    # Try different extensions
+    extensions = ['.csv', '.xlsx', '.html']
     
-    raise Exception(f"No matching file found for week {week_id}")
+    for pattern in patterns:
+        for ext in extensions:
+            try:
+                return find_file(service, f"{pattern}{ext}", parent_id)
+            except:
+                continue
+    
+    raise Exception(f"No matching file found for patterns: {patterns} with extensions {extensions}")
 
 def download_file(service, file_id):
     request = service.files().get_media(fileId=file_id)
@@ -344,7 +346,7 @@ def read_excel_content(file_content):
 def read_csv_content(file_content):
     return pd.read_csv(file_content)
 
-# View functions
+# View functions remain the same as before
 def show_all_at_once_view(service, allatonce_folder_id, selected_week):
     st.title("Industry Report - All at Once View")
     display_week = selected_week.replace('week', 'Week ').replace("'", "'").title()
@@ -395,7 +397,7 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
     
     tabs = st.tabs(tab_names)
     
-    with tabs[0]:  # Summary tab
+    with tabs[0]:
         st.subheader(f"Summary for {selected_company}")
         if pd.notna(company_summary['Summary']):
             st.markdown(f"""
@@ -512,7 +514,18 @@ def main():
         )
         
         try:
-            summary_file_id = find_week_file(service, "summary", selected_week, folder_ids['summary_sources'])
+            # First try with the selected week format
+            try:
+                summary_file_id = find_week_file(service, "summary", selected_week, folder_ids['summary_sources'])
+            except Exception as first_error:
+                # If that fails, try the alternate format (with/without apostrophe)
+                alternate_week = selected_week.replace("'", "") if "'" in selected_week else f"{selected_week[:-2]}'{selected_week[-2:]}"
+                try:
+                    summary_file_id = find_week_file(service, "summary", alternate_week, folder_ids['summary_sources'])
+                except Exception as second_error:
+                    st.error(f"Could not load summary data. Tried both {selected_week} and {alternate_week} formats.")
+                    return
+            
             summary_file = download_file(service, summary_file_id)
             summary_df = read_csv_content(summary_file)
             companies = summary_df['Company'].unique().tolist()
