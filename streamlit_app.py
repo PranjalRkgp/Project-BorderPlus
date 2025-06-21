@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from PIL import Image
 
-icon = Image.open('BorderPlus_icon.png')
+icon=Image.open('BorderPlus_icon.png')
 # Set page config with light theme
 st.set_page_config(
     page_title="Competitor Insights Dashboard",
@@ -208,7 +208,7 @@ def authenticate():
         st.error(f"Authentication failed: {str(e)}")
         return None
 
-# Helper function to find files
+# Helper functions
 def find_file(service, name, parent_id=None, mime_type=None):
     query = f"name = '{name}'"
     if parent_id:
@@ -221,7 +221,6 @@ def find_file(service, name, parent_id=None, mime_type=None):
         raise Exception(f"'{name}' not found.")
     return files[0]['id']
 
-# Updated function to get available weeks
 def get_available_weeks(service, folder_id):
     query = f"'{folder_id}' in parents"
     results = service.files().list(q=query, fields="files(name)").execute()
@@ -232,110 +231,44 @@ def get_available_weeks(service, folder_id):
                   'july', 'august', 'september', 'october', 'november', 'december']
     
     for item in items:
-        filename = item['name']
-        if 'week' in filename.lower():
+        if 'week' in item['name'].lower():
             try:
-                # Handle "Industry_Report_week2june 25.html" format
-                if 'industry_report' in filename.lower():
-                    week_part = filename.split('Industry_Report_')[-1].split('.')[0]  # "week2june 25"
-                else:
-                    week_part = filename.split('.')[0]  # "week2june 25"
-                
-                # Extract components from "week2june 25"
-                week_num = int(''.join(filter(str.isdigit, week_part.split('week')[1].split('june')[0])))
-                year_part = week_part.split(' ')[-1]  # "25"
-                
-                # Create identifiers
-                identifier = f'week{week_num}june {year_part}'  # "week2june 25"
-                display_name = f"Week {week_num} June {year_part}"
-                
-                weeks.append({
-                    'identifier': identifier,
-                    'display_name': display_name,
-                    'sort_key': (int("20" + year_part), 6, week_num)  # 2025, June (6), week 2
-                })
+                # Extract week number and month name
+                parts = item['name'].lower().split('week')
+                if len(parts) > 1:
+                    week_month_part = parts[1].split('.')[0]  # Remove file extension
+                    
+                    # Separate week number from month name
+                    week_num_str = ''
+                    month_name = ''
+                    for i, c in enumerate(week_month_part):
+                        if c.isdigit():
+                            week_num_str += c
+                        else:
+                            month_name = week_month_part[i:]
+                            break
+                    
+                    if week_num_str and month_name in month_order:
+                        week_num = int(week_num_str)
+                        month_num = month_order.index(month_name) + 1
+                        weeks.append({
+                            'identifier': f'week{week_num}{month_name}',
+                            'sort_key': (month_num, week_num),
+                            'display_name': f"Week {week_num} {month_name.capitalize()}"
+                        })
             except Exception as e:
-                print(f"Error processing file {filename}: {str(e)}")
+                print(f"Error processing file {item['name']}: {str(e)}")
                 continue
     
-    # Remove duplicates and sort
-    unique_weeks = {w['identifier']: w for w in weeks}.values()
-    sorted_weeks = sorted(unique_weeks, key=lambda x: x['sort_key'])
+    # Sort by month number, then by week number (oldest to newest)
+    weeks.sort(key=lambda x: x['sort_key'])
     
+    # Return both identifiers and display names
     return {
-        'identifiers': [w['identifier'] for w in sorted_weeks],
-        'display_names': [w['display_name'] for w in sorted_weeks]
+        'identifiers': [w['identifier'] for w in weeks],
+        'display_names': [w['display_name'] for w in weeks]
     }
 
-def find_week_file(service, prefix, week_id, parent_id):
-    """Finds week files with space-separated year"""
-    # All possible filename patterns to try
-    patterns = [
-        f"{prefix}_{week_id}",       # "summary_week2june 25"
-        f"{prefix}_{week_id.replace(' ', '')}",  # "summary_week2june25"
-        f"{prefix}_{week_id.replace(' ', "'")}", # "summary_week2june'25"
-        week_id,                     # "week2june 25"
-        week_id.replace(' ', ''),    # "week2june25"
-        week_id.replace(' ', "'")    # "week2june'25"
-    ]
-    
-    # All possible extensions to try
-    extensions = ['.csv', '.xlsx', '.html']
-    
-    # Try EVERY combination
-    for pattern in patterns:
-        for ext in extensions:
-            try:
-                file_id = find_file(service, f"{pattern}{ext}", parent_id)
-                print(f"Found file: {pattern}{ext}")  # Debug logging
-                return file_id
-            except Exception as e:
-                print(f"Tried but failed: {pattern}{ext}")  # Debug logging
-                continue
-    
-    # If nothing found, show ALL attempted patterns
-    attempted = [f"{p}{e}" for p in patterns for e in extensions]
-    raise Exception(f"No matching file found. Attempted:\n{'\n'.join(attempted)}")
-    
-# Enhanced file finder that handles multiple formats
-def find_week_file(service, prefix, week_id, parent_id):
-    """Finds week files with ALL possible naming variations"""
-    # Extract the core date portion (after 'week')
-    date_part = week_id[4:] if week_id.startswith('week') else week_id
-    
-    # All possible filename patterns to try (IN ORDER OF PRIORITY)
-    patterns = [
-        # Your exact format with apostrophe
-        f"{prefix}_week{date_part}",       # summary_week2june'25
-        f"week{date_part}",                # week2june'25
-        
-        # Variations without apostrophe
-        f"{prefix}_week{date_part.replace("'", "")}",  # summary_week2june25
-        f"week{date_part.replace("'", "")}",           # week2june25
-        
-        # Raw patterns without prefix
-        date_part,                         # 2june'25
-        date_part.replace("'", "")         # 2june25
-    ]
-    
-    # All possible extensions to try
-    extensions = ['.csv', '.xlsx', '.html']
-    
-    # Try EVERY combination
-    for pattern in patterns:
-        for ext in extensions:
-            try:
-                file_id = find_file(service, f"{pattern}{ext}", parent_id)
-                print(f"Found file: {pattern}{ext}")  # Debug logging
-                return file_id
-            except Exception as e:
-                print(f"Tried but failed: {pattern}{ext}")  # Debug logging
-                continue
-    
-    # If nothing found, show ALL attempted patterns
-    attempted = [f"{p}{e}" for p in patterns for e in extensions]
-    raise Exception(f"No matching file found. Attempted:\n{'\n'.join(attempted)}")
-    
 def download_file(service, file_id):
     request = service.files().get_media(fileId=file_id)
     fh = io.BytesIO()
@@ -357,17 +290,18 @@ def read_excel_content(file_content):
 def read_csv_content(file_content):
     return pd.read_csv(file_content)
 
-# View functions remain the same as before
+# View functions
 def show_all_at_once_view(service, allatonce_folder_id, selected_week):
     st.title("Industry Report - All at Once View")
-    display_week = selected_week.replace('week', 'Week ').replace("'", "'").title()
+    display_week = selected_week.replace('week', 'Week ').title()
     st.subheader(f"You are viewing the complete industry report for {display_week}")
     
     try:
-        html_file_id = find_week_file(service, "Industry_Report", selected_week, allatonce_folder_id)
+        html_file_id = find_file(service, f"industry_report_{selected_week}.html", parent_id=allatonce_folder_id)
         html_file = download_file(service, html_file_id)
         html_content = read_html_content(html_file)
         
+        # Wrap in a container with custom styling
         st.markdown(f"""
         <div class="custom-container">
             {html_content}
@@ -378,12 +312,12 @@ def show_all_at_once_view(service, allatonce_folder_id, selected_week):
         st.error(f"Could not load industry report: {str(e)}")
 
 def show_dashboard_view(service, folder_ids, selected_week, selected_company, summary_df):
-    display_week = selected_week.replace('week', 'Week ').replace("'", "'").title()
+    display_week = selected_week.replace('week', 'Week ').title()
     st.title(f"{selected_company} Insights Dashboard")
     st.subheader(f"You are viewing {display_week} data")
     
     try:
-        raw_file_id = find_week_file(service, "raw_info", selected_week, folder_ids['raw_info_sources'])
+        raw_file_id = find_file(service, f"raw_info_{selected_week}.xlsx", parent_id=folder_ids['raw_info_sources'])
         raw_file = download_file(service, raw_file_id)
         raw_df = read_excel_content(raw_file)
     except Exception as e:
@@ -408,7 +342,7 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
     
     tabs = st.tabs(tab_names)
     
-    with tabs[0]:
+    with tabs[0]:  # Summary tab
         st.subheader(f"Summary for {selected_company}")
         if pd.notna(company_summary['Summary']):
             st.markdown(f"""
@@ -429,6 +363,7 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
                 if ref:
                     st.markdown(f"- [{ref}]({ref})")
     
+    # Define the mapping between tabs and corresponding columns
     tab_fields = {
         "New Market": "new_market",
         "New Product": "new_product",
@@ -441,10 +376,12 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
         "Partnerships": "partnerships"
     }
     
+    # Create tabs for each field
     for tab_name, field in tab_fields.items():
         with tabs[tab_names.index(tab_name)]:
             st.subheader(tab_name)
             
+            # Filter data for this company and field (excluding empty, None, and 'none' values)
             relevant_data = company_raw_data[
                 (company_raw_data[field].astype(str).str.lower().ne('none')) & 
                 (company_raw_data[field].astype(str).str.lower().ne('nan')) & 
@@ -454,11 +391,14 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
             if relevant_data.empty:
                 st.info(f"No {tab_name.lower()} information available for this week.")
             else:
+                # Reset index to ensure unique identifiers for each row
                 relevant_data = relevant_data.reset_index(drop=True)
                 
                 for idx, row in relevant_data.iterrows():
+                    # Create a unique key for each button using tab_name and index
                     button_key = f"see_more_{tab_name.lower()}_{idx}"
                     
+                    # Create a card for each entry
                     with st.container():
                         st.markdown(f"""
                             <div class="info-card">
@@ -469,7 +409,9 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
                             </div>
                         """, unsafe_allow_html=True)
                         
+                        # Add a "See More" button with unique key
                         if st.button(f"See More Details", key=button_key):
+                            # Create a modal to show more details
                             with st.expander("Full Details", expanded=True):
                                 st.markdown(f"**URL:** [{row['URL']}]({row['URL']})")
                                 st.markdown(f"**Date:** {row['Date']}")
@@ -481,6 +423,7 @@ def show_dashboard_view(service, folder_ids, selected_week, selected_company, su
                                 """, unsafe_allow_html=True)
 
 def main():
+    # Initialize session state variables
     if 'show_details' not in st.session_state:
         st.session_state.show_details = False
     
@@ -507,16 +450,31 @@ def main():
         available_weeks = weeks_data['identifiers']
         week_display_names = weeks_data['display_names']
         
+        # Default to latest week (last in sorted list)
         default_week_index = len(available_weeks) - 1 if available_weeks else 0
     except Exception as e:
         st.error(f"Could not retrieve available weeks: {str(e)}")
         return
     
+    # Add logo to the top middle of the page
+    # st.markdown(
+    #     """
+    #     <div class='logo-container'>
+    #         <img src='BorderPlus_logo.png'>
+    #     </div>
+    #     """,
+    #     unsafe_allow_html=True
+    # )
+    # image = Image.open('BorderPlus_logo.png')
+    # st.image(image, width=200)
+    
     with st.sidebar:
+        
         image = Image.open('BorderPlus_logo.png')
         st.image(image)
         st.header("Competitor Analysis Controls")
         
+        # Week selection with formatted display names
         selected_week = st.selectbox(
             "Select Week",
             options=available_weeks,
@@ -524,19 +482,9 @@ def main():
             index=default_week_index
         )
         
+        # Load summary data for the selected week
         try:
-            # First try with the selected week format
-            try:
-                summary_file_id = find_week_file(service, "summary", selected_week, folder_ids['summary_sources'])
-            except Exception as first_error:
-                # If that fails, try the alternate format (with/without apostrophe)
-                alternate_week = selected_week.replace("'", "") if "'" in selected_week else f"{selected_week[:-2]}'{selected_week[-2:]}"
-                try:
-                    summary_file_id = find_week_file(service, "summary", alternate_week, folder_ids['summary_sources'])
-                except Exception as second_error:
-                    st.error(f"Could not load summary data. Tried both {selected_week} and {alternate_week} formats.")
-                    return
-            
+            summary_file_id = find_file(service, f"summary_{selected_week}.csv", parent_id=folder_ids['summary_sources'])
             summary_file = download_file(service, summary_file_id)
             summary_df = read_csv_content(summary_file)
             companies = summary_df['Company'].unique().tolist()
@@ -545,12 +493,14 @@ def main():
             st.error(f"Could not load summary data: {str(e)}")
             return
         
+        # Company selection with "View All at Once" as default
         selected_company = st.selectbox(
             "Select Company", 
             options=companies,
-            index=0
+            index=0  # Default to "View All at Once"
         )
         
+        # Single button to toggle details view
         if st.button("Show Details"):
             if selected_company == "View All at Once":
                 st.session_state.show_details = False
@@ -558,6 +508,7 @@ def main():
                 st.session_state.show_details = True
             st.rerun()
     
+    # Determine which view to show
     if selected_company == "View All at Once" or not st.session_state.show_details:
         show_all_at_once_view(service, folder_ids['allatonce'], selected_week)
     else:
@@ -565,3 +516,6 @@ def main():
         
 if __name__ == "__main__":
     main()
+
+
+Explain me this code's working in detail in backend
